@@ -80,45 +80,52 @@
 #define latchPinLed 11
 #define clockPinLed 12
 
-
+//Claw
 byte clawCondition = 0; //0 = open, 1 = closed
-int clawSteps = 200;  //always the same amount of steps to open/close
+const int clawSteps = 50;  //always the same amount of steps to open/close
 
-int eToC;
-int cToA1;
-int cToA2;
-int a1ToB;
-int a2ToB;
+//stepcount for every route
+const int eToC = 50;
+const int cToA1 = 50;
+const int cToA2 = 50;
+const int a1ToB = 50;
+const int a2ToB = 50;
 
+//Piezo sensor
 int piezoValue = 0;
 int piezoCounter = 0;
 
+//IR variable
 byte ballPosition = 0; //0 == no ball; 1 == ball at A1; 2 == ball at A2
 
+//LED
 byte flashLedState = 0;
-byte activeLedBitMask = B10101010;
+unsigned long lastLedFlash = 0;
+const unsigned long flashDelay = 500;
 
+//Shiftregisters
+byte activeLedBitMask = B10101010;
 byte activeClawBitMask = B10000001;
-byte activeTowerBitMask = B10000001;
+byte activeTowerBitMask = B10000000;
 
 //debouncing Reset-Button
 byte lastResetReading = LOW;
-long lastResetDebounceTime = 0;
-long resetDebounceDelay = 50;
+unsigned long lastResetDebounceTime = 0;
+const unsigned long resetDebounceDelay = 50;
 int resetButtonState;
 int lastResetButtonState = LOW;
 
 //debouncing Start-Button
 byte lastStartReading = LOW;
-long lastStartDebounceTime = 0;
-long startDebounceDelay = 50;
+unsigned long lastStartDebounceTime = 0;
+const unsigned long startDebounceDelay = 50;
 int startButtonState;
 int lastStartButtonState = LOW;
 
 //debouncing EndSwitch-Button
 byte lastEndReading = LOW;
-long lastEndDebounceTime = 0;
-long endDebounceDelay = 50;
+unsigned long lastEndDebounceTime = 0;
+const unsigned long endDebounceDelay = 20;
 int endButtonState;
 int lastEndButtonState = LOW;
 
@@ -126,11 +133,39 @@ int lastEndButtonState = LOW;
    Setup
 */
 void setup() {
-  //pinMode();
+  //setup analog pins
+  pinMode(RESET, INPUT);
+  pinMode(START, INPUT);
+  pinMode(IR1, INPUT);
+  pinMode(IR2, INPUT);
+  pinMode(EndSwitch, INPUT);
+  pinMode(PIEZO, INPUT);
 
-  // + LED-Setup
+  //setup digital pins
+  pinMode(ClawSTEP, OUTPUT);
+  pinMode(ClawDIR, OUTPUT);
+  pinMode(dataPinClaw, OUTPUT);
+  pinMode(latchPinClaw, OUTPUT);
+  pinMode(clockPinClaw, OUTPUT);
+  pinMode(TowerSTEP, OUTPUT);
+  pinMode(TowerDIR, OUTPUT);
+  pinMode(dataPinTower, OUTPUT);
+  pinMode(latchPinTower, OUTPUT);
+  pinMode(clockPinTower, OUTPUT);
+  pinMode(dataPinLed, OUTPUT);
+  pinMode(latchPinLed, OUTPUT);
+  pinMode(clockPinLed, OUTPUT);
+
+  //setup shiftregisters
+  updateShiftRegister(dataPinLed, clockPinLed, latchPinLed, activeLedBitMask);
   updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
   updateShiftRegister(dataPinTower, clockPinTower, latchPinTower, activeClawBitMask);
+
+  //first state setup other pins
+  digitalWrite(ClawSTEP, LOW);
+  digitalWrite(ClawDIR, LOW);
+  digitalWrite(TowerSTEP, LOW);
+  digitalWrite(TowerDIR, LOW);
 }
 
 /*
@@ -140,7 +175,7 @@ void loop() {
 
   if (getResetSignal() == true) {
     checkIR();
-    openClaw();
+    openClaw(clawSteps);
     resetTower();     //turnTower() and checkEndSwitch() simultaneous
   }
 
@@ -152,7 +187,7 @@ void loop() {
     else if (ballPosition = 2) {
       turnTower(cToA2);      //stands at C, turns to A2
     }
-    closeClaw();
+    closeClaw(clawSteps);
     //updateShiftRegister(dataPinLed, clockPinLed, latchPinLed, activeLedBitMask);
 
     //delivering the ball
@@ -167,7 +202,6 @@ void loop() {
   }
 
   flashLED();
-
 }
 
 
@@ -242,7 +276,7 @@ boolean getStartSignal() {
 */
 void updateShiftRegister(byte dataPin, byte clockPin, byte latchPin, byte updateBitMask) {
   digitalWrite(latchPin, LOW);
-  shiftOut(dataPin, clockPin, MSBFIRST, updateBitMask);
+  shiftOut(dataPin, clockPin, LSBFIRST, updateBitMask);
   digitalWrite(latchPin, HIGH);
 }
 
@@ -257,15 +291,19 @@ void updateShiftRegister(byte dataPin, byte clockPin, byte latchPin, byte update
    Return:
 */
 void flashLED() {
-  if (flashLedState = 0) {
-    activeLedBitMask = activeLedBitMask | B00000001;
-    flashLedState = 1;
+  //Led-state is only changed every 'flashDelay'-seconds
+  if ((millis() - lastLedFlash) > flashDelay) {
+    if (flashLedState = 0) {
+      activeLedBitMask = activeLedBitMask | B00000001;
+      flashLedState = 1;
+    }
+    else if (flashLedState = 1) {
+      activeLedBitMask = activeLedBitMask & B11111110;
+      flashLedState = 0;
+    }
+    updateShiftRegister(dataPinLed, clockPinLed, latchPinLed, activeLedBitMask);
+    lastLedFlash = millis();
   }
-  else if (flashLedState = 1) {
-    activeLedBitMask = activeLedBitMask & B11111110;
-    flashLedState = 0;
-  }
-  updateShiftRegister(dataPinLed, clockPinLed, latchPinLed, activeLedBitMask);
 }
 
 
@@ -274,9 +312,11 @@ void flashLED() {
 */
 
 /*
-   Description:
-   Parameter:
-   Return:
+   Description: distinguishes between negative and positive parameter to set direction, and
+   steps as far as defined in the given parameter. de- and accelerates with the drivers
+   microstep-function.
+   Parameter: needed stepcount
+   Return: -
 */
 void turnTower(int stepsToTarget) {
   if (stepsToTarget > 0) {  //algebraic sign positive == ccw
@@ -288,41 +328,37 @@ void turnTower(int stepsToTarget) {
   stepsToTarget = abs(stepsToTarget); //deleting algebraic sign
   delay(1); //step-flank at least 1ms after direction change
 
-  // rotate; one high-low-flank per step
-  for (int i = 0; i < (stepsToTarget + 52); i++) {  //+52 steps for de- and acceleration
+  stepsToTarget += 52; //compensation for de- and acceleration
 
-    if (i <= 16) {
-      //activeTowerBitMask = (16tel Schritte)
-    }
-    if ((i > 16) && (i <= 24)) {
-      //activeTowerBitMask = (8tel Schritte)
-    }
-    if ((i > 24) && (i <= 28)) {
-      //activeTowerBitMask = (4tel Schritte)
-    }
-    if ((i > 28) && (i <= 30)) {
-      //activeTowerBitMask = (2tel Schritte)
-    }
-    if ((i > 30) && (i <= (stepsToTarget - 30))) {
-      //activeTowerBitMask = (ganze Schritte)
-    }
+  for (int i = 0; i < stepsToTarget; i++) {
 
-    if ((i > (stepsToTarget - 30)) && (i <= (stepsToTarget - 28))) {
-      //(2tel Schritte)
+    if ((i = 0) || (i = (stepsToTarget - 16))) {
+      //16tel Schritte
+      activeTowerBitMask = B11110000;
+      updateShiftRegister(dataPinTower, clockPinTower, latchPinTower, activeTowerBitMask);
     }
-    if ((i > (stepsToTarget - 28)) && (i <= (stepsToTarget - 24))) {
-      //(4tel Schritte)
+    if ((i = 16) || (i = (stepsToTarget - 24))) {
+      //8tel Schritte
+      activeTowerBitMask = B11100000;
+      updateShiftRegister(dataPinTower, clockPinTower, latchPinTower, activeTowerBitMask);
     }
-    if ((i > (stepsToTarget - 24)) && (i <= (stepsToTarget - 16))) {
-      //(8tel Schritte)
+    if ((i = 24) || (i = (stepsToTarget - 28))) {
+      //4tel Schritte
+      activeTowerBitMask = B10100000;
+      updateShiftRegister(dataPinTower, clockPinTower, latchPinTower, activeTowerBitMask);
     }
-    if ((i > (stepsToTarget - 16)) && (i <= stepsToTarget)) {
-      //(16tel Schritte)
+    if ((i = 28) || (i = (stepsToTarget - 30))) {
+      //2tel Schritte
+      activeTowerBitMask = B11000000;
+      updateShiftRegister(dataPinTower, clockPinTower, latchPinTower, activeTowerBitMask);
+    }
+    if (i = 30) {
+      //ganze Schritte
+      activeTowerBitMask = B10000000;
+      updateShiftRegister(dataPinTower, clockPinTower, latchPinTower, activeTowerBitMask);
     }
 
-    updateShiftRegister(dataPinTower, clockPinTower, latchPinTower, activeTowerBitMask);
-
-    //minmal flank of 1ms; motor possibly needs more
+    //one high-low-flank per step; minmal flank of 1ms; motor possibly needs more
     digitalWrite(TowerSTEP, HIGH);
     delay(1);
     digitalWrite(TowerSTEP, LOW);
@@ -331,50 +367,48 @@ void turnTower(int stepsToTarget) {
 }
 
 /*
-   Description:
-   Parameter:
-   Return:
+   Description: distinguishes between negative and positive parameter to set direction, and
+   steps as far as defined in the given parameter. de- and accelerates with the drivers
+   microstep-function.
+   Parameter: needed stepcount (constant)
+   Return: -
 */
-void openClaw() {
+void openClaw(int stepsToTarget) {
   if (clawCondition = 1) {
     digitalWrite(ClawDIR, HIGH);  //direction high == ccw
     delay(1); //step-flank at least 1ms after direction change
 
-    // rotate; one high-low-flank per step
-    for (int i = 0; i < (clawSteps + 52); i++) {  //+52 steps for de- and acceleration
+    stepsToTarget += 52; //compensation for de- and acceleration
 
-      if (i <= 16) {
-        //activeClawBitMask = (16tel Schritte)
-      }
-      if ((i > 16) && (i <= 24)) {
-        //activeClawBitMask = (8tel Schritte)
-      }
-      if ((i > 24) && (i <= 28)) {
-        //activeClawBitMask = (4tel Schritte)
-      }
-      if ((i > 28) && (i <= 30)) {
-        //activeClawBitMask = (2tel Schritte)
-      }
-      if ((i > 30) && (i <= (clawSteps - 30))) {
-        //activeClawBitMask = (ganze Schritte)
-      }
+    for (int i = 0; i < stepsToTarget; i++) {
 
-      if ((i > (clawSteps - 30)) && (i <= (clawSteps - 28))) {
-        //(2tel Schritte)
+      if ((i = 0) || (i = (stepsToTarget - 16))) {
+        //16tel Schritte
+        activeClawBitMask = B11110000;
+        updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
       }
-      if ((i > (clawSteps - 28)) && (i <= (clawSteps - 24))) {
-        //(4tel Schritte)
+      if ((i = 16) || (i = (stepsToTarget - 24))) {
+        //8tel Schritte
+        activeClawBitMask = B11100000;
+        updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
       }
-      if ((i > (clawSteps - 24)) && (i <= (clawSteps - 16))) {
-        //(8tel Schritte)
+      if ((i = 24) || (i = (stepsToTarget - 28))) {
+        //4tel Schritte
+        activeClawBitMask = B10100000;
+        updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
       }
-      if ((i > (clawSteps - 16)) && (i <= clawSteps)) {
-        //(16tel Schritte)
+      if ((i = 28) || (i = (stepsToTarget - 30))) {
+        //2tel Schritte
+        activeClawBitMask = B11000000;
+        updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
+      }
+      if (i = 30) {
+        //ganze Schritte
+        activeClawBitMask = B10000000;
+        updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
       }
 
-      updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
-
-      //minmal flank of 1ms; motor possibly needs more
+      //one high-low-flank per step; minmal flank of 1ms; motor possibly needs more
       digitalWrite(ClawSTEP, HIGH);
       delay(1);
       digitalWrite(ClawSTEP, LOW);
@@ -384,50 +418,48 @@ void openClaw() {
 }
 
 /*
-   Description:
-   Parameter:
-   Return:
+   DDescription: distinguishes between negative and positive parameter to set direction, and
+   steps as far as defined in the given parameter. de- and accelerates with the drivers
+   microstep-function.
+   Parameter: needed stepcount (constant)
+   Return: -
 */
-void closeClaw() {
+void closeClaw(int stepsToTarget) {
   if (clawCondition = 1) {
     digitalWrite(ClawDIR, LOW);  //direction low == cw
     delay(1); //step-flank at least 1ms after direction change
 
-    // rotate; one high-low-flank per step
-    for (int i = 0; i < (clawSteps + 52); i++) { //+52 steps for de- and acceleration
+    stepsToTarget += 52; //compensation for de- and acceleration
 
-      if (i <= 16) {
-        //activeClawBitMask = (16tel Schritte)
-      }
-      if ((i > 16) && (i <= 24)) {
-        //activeClawBitMask = (8tel Schritte)
-      }
-      if ((i > 24) && (i <= 28)) {
-        //activeClawBitMask = (4tel Schritte)
-      }
-      if ((i > 28) && (i <= 30)) {
-        //activeClawBitMask = (2tel Schritte)
-      }
-      if ((i > 30) && (i <= (clawSteps - 30))) {
-        //activeClawBitMask = (ganze Schritte)
-      }
+    for (int i = 0; i < stepsToTarget; i++) {
 
-      if ((i > (clawSteps - 30)) && (i <= (clawSteps - 28))) {
-        //(2tel Schritte)
+      if ((i = 0) || (i = (stepsToTarget - 16))) {
+        //16tel Schritte
+        activeClawBitMask = B11110000;
+        updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
       }
-      if ((i > (clawSteps - 28)) && (i <= (clawSteps - 24))) {
-        //(4tel Schritte)
+      if ((i = 16) || (i = (stepsToTarget - 24))) {
+        //8tel Schritte
+        activeClawBitMask = B11100000;
+        updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
       }
-      if ((i > (clawSteps - 24)) && (i <= (clawSteps - 16))) {
-        //(8tel Schritte)
+      if ((i = 24) || (i = (stepsToTarget - 28))) {
+        //4tel Schritte
+        activeClawBitMask = B10100000;
+        updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
       }
-      if ((i > (clawSteps - 16)) && (i <= clawSteps)) {
-        //(16tel Schritte)
+      if ((i = 28) || (i = (stepsToTarget - 30))) {
+        //2tel Schritte
+        activeClawBitMask = B11000000;
+        updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
+      }
+      if (i = 30) {
+        //ganze Schritte
+        activeClawBitMask = B10000000;
+        updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
       }
 
-      updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
-
-      //minmal flank of 1ms; motor possibly needs more
+      //one high-low-flank per step; minmal flank of 1ms; motor possibly needs more
       digitalWrite(ClawSTEP, HIGH);
       delay(1);
       digitalWrite(ClawSTEP, LOW);
