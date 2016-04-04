@@ -34,10 +34,10 @@
    Created 22.03.16
    David Fleischlin
 
-   Modified 01.04.16
+   Modified 03.04.16
    David Fleischlin
 
-   Version: 0.1
+   Version: 0.5
 
    Group Project PDP1/2, Team04
     - Marc Bichsel
@@ -82,14 +82,14 @@
 
 //Claw
 byte clawCondition = 0; //0 = open, 1 = closed
-const int clawSteps = 50;  //always the same amount of steps to open/close
+const int clawSteps = 30;  //always the same amount of steps to open/close
 
 //stepcount for every route
-const int eToC = 50;
-const int cToA1 = 50;
-const int cToA2 = 50;
+const int eToC = -20;
+const int cToA1 = -25;
+const int cToA2 = -15;
 const int a1ToB = 50;
-const int a2ToB = 50;
+const int a2ToB = 40;
 
 //Piezo sensor
 int piezoValue = 0;
@@ -105,7 +105,7 @@ const unsigned long flashDelay = 500;
 
 //Shiftregisters
 byte activeLedBitMask = B10101010;
-byte activeClawBitMask = B10000001;
+byte activeClawBitMask = B10000000;
 byte activeTowerBitMask = B10000000;
 
 //debouncing Reset-Button
@@ -176,7 +176,8 @@ void loop() {
   if (getResetSignal() == true) {
     checkIR();
     openClaw(clawSteps);
-    resetTower();     //turnTower() and checkEndSwitch() simultaneous
+    //resetTower();     //turnTower() and checkEndSwitch() simultaneous
+    turnTower(50);
   }
 
   if (getStartSignal() == true) {
@@ -197,7 +198,8 @@ void loop() {
     else if (ballPosition = 2) {
       turnTower(a2ToB);      //stands at A2, turns to B
     }
-    deliverBall();    //openClaw() and checkPiezo() simultaneous
+    //deliverBall();    //openClaw() and checkPiezo() simultaneous
+    openClaw(clawSteps);
     //updateShiftRegister(dataPinLed, clockPinLed, latchPinLed, activeLedBitMask);
   }
 
@@ -319,11 +321,11 @@ void flashLED() {
    Return: -
 */
 void turnTower(int stepsToTarget) {
-  if (stepsToTarget > 0) {  //algebraic sign positive == ccw
-    digitalWrite(TowerDIR, HIGH);  //direction high == ccw
-  }
-  else {  //algebraic sign negative == cw
+  if (stepsToTarget > 0) {  //algebraic sign negative == cw
     digitalWrite(TowerDIR, LOW);  //direction low == cw
+  }
+  else {  //algebraic sign positive == ccw
+    digitalWrite(TowerDIR, HIGH);  //direction high == ccw
   }
   stepsToTarget = abs(stepsToTarget); //deleting algebraic sign
   delay(1); //step-flank at least 1ms after direction change
@@ -363,6 +365,10 @@ void turnTower(int stepsToTarget) {
     delay(1);
     digitalWrite(TowerSTEP, LOW);
     delay(1);
+
+    if (checkEndSwitch() == true) {
+      break;
+    }
   }
 }
 
@@ -413,7 +419,10 @@ void openClaw(int stepsToTarget) {
       delay(1);
       digitalWrite(ClawSTEP, LOW);
       delay(1);
+
+      checkPiezo();
     }
+    //activeLedBitMask = B10000001;
   }
 }
 
@@ -465,26 +474,21 @@ void closeClaw(int stepsToTarget) {
       digitalWrite(ClawSTEP, LOW);
       delay(1);
     }
+    //activeLedBitMask = B10100110;
   }
 }
 
+
 /*
-   Description:
-   Parameter:
-   Return:
-*/
 void resetTower() {
   while (checkEndSwitch == false) {
     turnTower(1);
   }
 }
 
-/*
-   Description:
-   Parameter:
-   Return:
-*/
+
 void deliverBall() { }
+*/
 
 
 /*
@@ -532,14 +536,11 @@ void checkPiezo() {
     piezoValue = piezoValue / counter;
     if (piezoValue > limit) {
       //activeLedBitMask = B10000001;
+      //updateShiftRegister(dataPinLed, clockPinLed, latchPinLed, activeLedBitMask);
     }
     piezoValue = 0;
     piezoCounter = 0;
   }
-  else {
-    //activeLedBitMask = B00011000;
-  }
-  //updateShiftRegister(dataPinLed, clockPinLed, latchPinLed, activeLedBitMask);
 }
 
 /*
@@ -571,68 +572,3 @@ boolean checkEndSwitch() {
   lastEndButtonState = endReading;
 }
 
-
-
-
-
-
-
-/*
-   Description:
-   Parameter:
-   Return:
-   Precondition:
-   Postcondition:
-*/
-
-/*
-   void toggleClaw() {
-  if(clawCondition == 'o'){ //Claw open
-    rotateMotor('claw', 'close');
-    clawCondition = 'c';
-  }
-  else if(clawCondition == 'c'){  //Claw closed
-    rotateMotor('claw', 'open');
-    clawCondition = 'o';
-  }
-  }
-
-
-  void setupClaw(byte bitMaskClaw) {
-
-  }
-
-
-  void setupTower(byte bitMaskTower) {
-
-  }
-
-
-   Description: writes the 'activeLedPattern'-variable into the
-   shiftregister
-   Parameter:
-   Return:
-
-  void updateLED() {
-  digitalWrite(latchPinLed, LOW);
-  shiftOut(dataPinLed, clockPinLed, MSBFIRST, activeLedPattern);
-  digitalWrite(latchPinLed, HIGH);
-  }
-
-
-   Description:
-   Parameter:
-   Return:
-
-  char getTowerPosition() { } //unused?
-
-
-  boolean getResetSignal() {
-  if (analogRead(RESET) == true) {
-    return true;
-  }
-  else {
-    return false;
-  }
-  }
-*/
