@@ -34,10 +34,10 @@
    Created 22.03.16
    David Fleischlin
 
-   Modified 03.04.16
+   Modified 14.04.16
    David Fleischlin
 
-   Version: 0.5
+   Version: 0.6
 
    Group Project PDP1/2, Team04
     - Marc Bichsel
@@ -105,8 +105,8 @@ const unsigned long flashDelay = 500;
 
 //Shiftregisters
 byte activeLedBitMask = B10101010;
-byte activeClawBitMask = B10000000;
-byte activeTowerBitMask = B10000000;
+byte activeClawBitMask = B00001100;
+byte activeTowerBitMask = B00001100;
 
 //debouncing Reset-Button
 byte lastResetReading = LOW;
@@ -159,7 +159,7 @@ void setup() {
   //setup shiftregisters
   updateShiftRegister(dataPinLed, clockPinLed, latchPinLed, activeLedBitMask);
   updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
-  updateShiftRegister(dataPinTower, clockPinTower, latchPinTower, activeClawBitMask);
+  updateShiftRegister(dataPinTower, clockPinTower, latchPinTower, activeTowerBitMask);
 
   //first state setup other pins
   digitalWrite(ClawSTEP, LOW);
@@ -182,20 +182,20 @@ void loop() {
 
   if (getStartSignal() == true) {
     //getting the ball
-    if (ballPosition = 1) {
+    if (ballPosition == 1) {
       turnTower(cToA1);      //stands at C, turns to A1
     }
-    else if (ballPosition = 2) {
+    else if (ballPosition == 2) {
       turnTower(cToA2);      //stands at C, turns to A2
     }
     closeClaw(clawSteps);
     //updateShiftRegister(dataPinLed, clockPinLed, latchPinLed, activeLedBitMask);
 
     //delivering the ball
-    if (ballPosition = 1) {
+    if (ballPosition == 1) {
       turnTower(a1ToB);      //stands at A1, turns to B
     }
-    else if (ballPosition = 2) {
+    else if (ballPosition == 2) {
       turnTower(a2ToB);      //stands at A2, turns to B
     }
     //deliverBall();    //openClaw() and checkPiezo() simultaneous
@@ -295,11 +295,11 @@ void updateShiftRegister(byte dataPin, byte clockPin, byte latchPin, byte update
 void flashLED() {
   //Led-state is only changed every 'flashDelay'-seconds
   if ((millis() - lastLedFlash) > flashDelay) {
-    if (flashLedState = 0) {
+    if (flashLedState == 0) {
       activeLedBitMask = activeLedBitMask | B00000001;
       flashLedState = 1;
     }
-    else if (flashLedState = 1) {
+    else if (flashLedState == 1) {
       activeLedBitMask = activeLedBitMask & B11111110;
       flashLedState = 0;
     }
@@ -334,29 +334,29 @@ void turnTower(int stepsToTarget) {
 
   for (int i = 0; i < stepsToTarget; i++) {
 
-    if ((i = 0) || (i = (stepsToTarget - 16))) {
+    if ((i == 0) || (i == (stepsToTarget - 16))) {
       //16tel Schritte
-      activeTowerBitMask = B11110000;
+      activeTowerBitMask = B01111100;
       updateShiftRegister(dataPinTower, clockPinTower, latchPinTower, activeTowerBitMask);
     }
-    if ((i = 16) || (i = (stepsToTarget - 24))) {
+    if ((i == 16) || (i == (stepsToTarget - 24))) {
       //8tel Schritte
-      activeTowerBitMask = B11100000;
+      activeTowerBitMask = B01101100;
       updateShiftRegister(dataPinTower, clockPinTower, latchPinTower, activeTowerBitMask);
     }
-    if ((i = 24) || (i = (stepsToTarget - 28))) {
+    if ((i == 24) || (i == (stepsToTarget - 28))) {
       //4tel Schritte
-      activeTowerBitMask = B10100000;
+      activeTowerBitMask = B00101100;
       updateShiftRegister(dataPinTower, clockPinTower, latchPinTower, activeTowerBitMask);
     }
-    if ((i = 28) || (i = (stepsToTarget - 30))) {
+    if ((i == 28) || (i == (stepsToTarget - 30))) {
       //2tel Schritte
-      activeTowerBitMask = B11000000;
+      activeTowerBitMask = B01001100;
       updateShiftRegister(dataPinTower, clockPinTower, latchPinTower, activeTowerBitMask);
     }
-    if (i = 30) {
+    if (i == 30) {
       //ganze Schritte
-      activeTowerBitMask = B10000000;
+      activeTowerBitMask = B00001100;
       updateShiftRegister(dataPinTower, clockPinTower, latchPinTower, activeTowerBitMask);
     }
 
@@ -380,7 +380,7 @@ void turnTower(int stepsToTarget) {
    Return: -
 */
 void openClaw(int stepsToTarget) {
-  if (clawCondition = 1) {
+  if (clawCondition == 1) {
     digitalWrite(ClawDIR, HIGH);  //direction high == ccw
     delay(1); //step-flank at least 1ms after direction change
 
@@ -388,29 +388,29 @@ void openClaw(int stepsToTarget) {
 
     for (int i = 0; i < stepsToTarget; i++) {
 
-      if ((i = 0) || (i = (stepsToTarget - 16))) {
+      if ((i == 0) || (i == (stepsToTarget - 16))) {
         //16tel Schritte
-        activeClawBitMask = B11110000;
+        activeClawBitMask = B01111100;
         updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
       }
-      if ((i = 16) || (i = (stepsToTarget - 24))) {
+      if ((i == 16) || (i == (stepsToTarget - 24))) {
         //8tel Schritte
-        activeClawBitMask = B11100000;
+        activeClawBitMask = B01101100;
         updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
       }
-      if ((i = 24) || (i = (stepsToTarget - 28))) {
+      if ((i == 24) || (i == (stepsToTarget - 28))) {
         //4tel Schritte
-        activeClawBitMask = B10100000;
+        activeClawBitMask = B00101100;
         updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
       }
-      if ((i = 28) || (i = (stepsToTarget - 30))) {
+      if ((i == 28) || (i == (stepsToTarget - 30))) {
         //2tel Schritte
-        activeClawBitMask = B11000000;
+        activeClawBitMask = B01001100;
         updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
       }
-      if (i = 30) {
+      if (i == 30) {
         //ganze Schritte
-        activeClawBitMask = B10000000;
+        activeClawBitMask = B00001100;
         updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
       }
 
@@ -434,7 +434,7 @@ void openClaw(int stepsToTarget) {
    Return: -
 */
 void closeClaw(int stepsToTarget) {
-  if (clawCondition = 1) {
+  if (clawCondition == 1) {
     digitalWrite(ClawDIR, LOW);  //direction low == cw
     delay(1); //step-flank at least 1ms after direction change
 
@@ -442,27 +442,27 @@ void closeClaw(int stepsToTarget) {
 
     for (int i = 0; i < stepsToTarget; i++) {
 
-      if ((i = 0) || (i = (stepsToTarget - 16))) {
+      if ((i == 0) || (i == (stepsToTarget - 16))) {
         //16tel Schritte
-        activeClawBitMask = B11110000;
+        activeClawBitMask = B01111100;
         updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
       }
-      if ((i = 16) || (i = (stepsToTarget - 24))) {
+      if ((i == 16) || (i == (stepsToTarget - 24))) {
         //8tel Schritte
-        activeClawBitMask = B11100000;
+        activeClawBitMask = B01101100;
         updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
       }
-      if ((i = 24) || (i = (stepsToTarget - 28))) {
+      if ((i == 24) || (i == (stepsToTarget - 28))) {
         //4tel Schritte
-        activeClawBitMask = B10100000;
+        activeClawBitMask = B00101100;
         updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
       }
-      if ((i = 28) || (i = (stepsToTarget - 30))) {
+      if ((i == 28) || (i == (stepsToTarget - 30))) {
         //2tel Schritte
-        activeClawBitMask = B11000000;
+        activeClawBitMask = B01001100;
         updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
       }
-      if (i = 30) {
+      if (i == 30) {
         //ganze Schritte
         activeClawBitMask = B10000000;
         updateShiftRegister(dataPinClaw, clockPinClaw, latchPinClaw, activeClawBitMask);
