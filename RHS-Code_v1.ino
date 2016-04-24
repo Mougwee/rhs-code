@@ -34,10 +34,10 @@
    Created 22.03.16
    David Fleischlin
 
-   Modified 14.04.16
+   Modified 22.04.16
    David Fleischlin
 
-   Version: 0.6
+   Version: 0.8
 
    Group Project PDP1/2, Team04
     - Marc Bichsel
@@ -52,8 +52,8 @@
 */
 
 //Sensors
-#define RESET 5
-#define START 4
+#define RESET 19
+#define START 18
 #define IR1 1
 #define IR2 2
 #define EndSwitch 3
@@ -109,25 +109,25 @@ byte activeClawBitMask = B00001100;
 byte activeTowerBitMask = B00001100;
 
 //debouncing Reset-Button
-byte lastResetReading = LOW;
 unsigned long lastResetDebounceTime = 0;
-const unsigned long resetDebounceDelay = 50;
-int resetButtonState;
-int lastResetButtonState = LOW;
+const unsigned long resetDebounceDelay = 40;
+byte resetButtonState = 0;
+byte lastResetButtonState = 0;
+byte resetButtonValue;
 
 //debouncing Start-Button
-byte lastStartReading = LOW;
 unsigned long lastStartDebounceTime = 0;
-const unsigned long startDebounceDelay = 50;
-int startButtonState;
-int lastStartButtonState = LOW;
+const unsigned long startDebounceDelay = 40;
+byte startButtonState = 0;
+byte lastStartButtonState = 0;
+byte startButtonValue;
 
 //debouncing EndSwitch-Button
-byte lastEndReading = LOW;
+//byte lastEndReading = LOW;
 unsigned long lastEndDebounceTime = 0;
 const unsigned long endDebounceDelay = 20;
-int endButtonState;
-int lastEndButtonState = LOW;
+int endButtonState = 0;
+int lastEndButtonState = 0;
 
 /*
    Setup
@@ -173,14 +173,14 @@ void setup() {
 */
 void loop() {
 
-  if (getResetSignal() == true) {
+  if (getResetSignal() == 1) {
     checkIR();
     openClaw(clawSteps);
     //resetTower();     //turnTower() and checkEndSwitch() simultaneous
     turnTower(50);
   }
 
-  if (getStartSignal() == true) {
+  if (getStartSignal() == 1) {
     //getting the ball
     if (ballPosition == 1) {
       turnTower(cToA1);      //stands at C, turns to A1
@@ -214,10 +214,11 @@ void loop() {
 /*
    Description: checks the Reset-Button's status
    Parameter: -
-   Return: returns 'true' if the button is being pressed
+   Return: returns '1' if the button is being pressed
 */
-boolean getResetSignal() {
-  int resetReading = analogRead(RESET); //saves the current state
+byte getResetSignal() {
+  resetButtonValue = 0;  //button is reseted
+  byte resetReading = digitalRead(RESET); //saves the current state
 
   //did the state change since last check?
   if (resetReading != lastResetButtonState) {
@@ -231,22 +232,27 @@ boolean getResetSignal() {
     if (resetReading != resetButtonState) {
       resetButtonState = resetReading;
 
+      //is the button being pressed?
       if (resetButtonState == HIGH) {
-        return true;  //returns if the button is pressed
+        resetButtonValue = 1;
       }
     }
   }
-
+  
   lastResetButtonState = resetReading;
+  //returns 1 = button is pressed, 0 = button is not pressed
+  return resetButtonValue;
 }
+
 
 /*
    Description: checks the Start-Button's status
    Parameter: -
    Return: returns 'true' if the button is being pressed
 */
-boolean getStartSignal() {
-  int startReading = analogRead(START); //saves the current state
+byte getStartSignal() {
+  startButtonValue = 0; //button is reseted
+  byte startReading = digitalRead(START); //saves the current state
 
   //did the state change since last check?
   if (startReading != lastStartButtonState) {
@@ -260,13 +266,16 @@ boolean getStartSignal() {
     if (startReading != startButtonState) {
       startButtonState = startReading;
 
-      if (startButtonState == HIGH) {
-        return true;  //returns if the button is pressed
+      //is the button being pressed?
+      if (startButtonState == 1) {
+        startButtonValue = 1;
       }
     }
   }
 
   lastStartButtonState = startReading;
+  //returns 1 = button is pressed, 0 = button is not pressed
+  return startButtonValue;
 }
 
 
@@ -480,14 +489,14 @@ void closeClaw(int stepsToTarget) {
 
 
 /*
-void resetTower() {
+  void resetTower() {
   while (checkEndSwitch == false) {
     turnTower(1);
   }
-}
+  }
 
 
-void deliverBall() { }
+  void deliverBall() { }
 */
 
 
@@ -502,18 +511,28 @@ void deliverBall() { }
    Return: -
 */
 void checkIR() {
-  if (analogRead(IR1) > 1000) {
-    //activeLedBitMask = B10000001;
+  int ir1Value = analogRead(IR1);
+  int ir2Value = analogRead(IR2);
+  
+  if (ir1Value < 1000) {
+    //setting LED for position 1
+    activeLedBitMask = activeLedBitMask | B10010000;
+    activeLedBitMask = activeLedBitMask & B10011111;
     ballPosition = 1;
   }
-  else if (analogRead(IR2) > 1000) {
-    //activeLedBitMask = B00011000;
+  if (ir2Value < 1000) {
+    //setting LED for position 2
+    activeLedBitMask = activeLedBitMask | B01100000;
+    activeLedBitMask = activeLedBitMask & B01101111;
     ballPosition = 2;
   }
-  else {
-    //activeLedBitMask = B00000000;
+  if (((ir1Value > 1000) && (ir2Value > 1000)) || ((ir1Value < 1000) && (ir2Value < 1000))) {
+    //setting LED for the case that no position of both positions are occupied
+    activeLedBitMask = activeLedBitMask | B01010000;
+    activeLedBitMask = activeLedBitMask & B01011111;
     ballPosition = 0;
   }
+  
   updateShiftRegister(dataPinLed, clockPinLed, latchPinLed, activeLedBitMask);
 }
 
@@ -527,7 +546,7 @@ void checkIR() {
 */
 void checkPiezo() {
   int counter = 20;
-  int limit = 200;
+  int limit = 30;
   if (piezoCounter < counter) {
     piezoValue += analogRead(PIEZO);
     piezoCounter += 1;
@@ -535,7 +554,8 @@ void checkPiezo() {
   else if (piezoCounter == counter) {
     piezoValue = piezoValue / counter;
     if (piezoValue > limit) {
-      //activeLedBitMask = B10000001;
+      //activeLedBitMask = activeLedBitMask | B00001000;
+      //activeLedBitMask = activeLedBitMask & B11111011;
       //updateShiftRegister(dataPinLed, clockPinLed, latchPinLed, activeLedBitMask);
     }
     piezoValue = 0;
@@ -551,6 +571,14 @@ void checkPiezo() {
 boolean checkEndSwitch() {
   int endReading = analogRead(EndSwitch); //saves the current state
 
+  //digitalize the analog output
+  if (endReading > 800) {
+    endReading = 1;
+  }
+  else {
+    endReading = 0;
+  }
+
   //did the state change since last check?
   if (endReading != lastEndButtonState) {
     lastEndDebounceTime = millis(); //resets debouncing timer
@@ -563,8 +591,11 @@ boolean checkEndSwitch() {
     if (endReading != endButtonState) {
       endButtonState = endReading;
 
-      if (endButtonState == HIGH) {
+      if (endButtonState == 1) {
         return true;  //returns if the button is pressed
+      }
+      else {
+        return false;
       }
     }
   }
